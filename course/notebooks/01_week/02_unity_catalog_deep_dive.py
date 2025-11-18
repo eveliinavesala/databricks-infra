@@ -420,7 +420,7 @@ print("\nSaving data in various formats for volume storage:")
 
 # Save as Parquet (optimized for analytics)
 try:
-    sales_df.write.mode("overwrite").parquet(f"{VOLUME_PATH}sales_data.parquet")
+    sales_df.write.mode("overwrite").parquet(f"{VOLUME_PATH}sales_data")
     print("✓ Saved as Parquet format")
 except Exception as e:
     print(f"Parquet save failed: {e}")

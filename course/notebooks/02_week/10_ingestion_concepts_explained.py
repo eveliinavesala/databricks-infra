@@ -253,9 +253,11 @@ df_json_clean.write.format("delta").mode("overwrite").saveAsTable(temp_clean_tab
 
 # df_explicit = spark.read.schema(user_schema).json(spark.table(temp_clean_table).rdd.map(lambda row: row.value))
 
-# Read clean data with explicit schema
+# Read clean data with explicit schema using from_json
 df_json_clean_read = spark.table(temp_clean_table).select("value")
-df_explicit_clean = spark.read.schema(user_schema).json(df_json_clean_read)
+df_explicit = df_json_clean_read.select(
+    from_json(col("value"), user_schema).alias("parsed")
+).select("parsed.*")
 
 print("\nWith clean data and explicit schema:")
 df_explicit.printSchema()

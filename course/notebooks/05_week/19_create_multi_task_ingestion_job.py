@@ -225,10 +225,12 @@ print(f"  - {CATALOG}.{USER_SCHEMA}.bronze_* (ingested data)")
 # MAGIC **Schedule (Optional):**
 # MAGIC ```
 # MAGIC Schedule type: Quartz Cron
-# MAGIC Cron expression: = 0 0 2 * * ?  (Daily at 2 AM)
+# MAGIC Cron expression: 0 0 2 * * ?  (Daily at 2 AM)
 # MAGIC Timezone: America/New_York
 # MAGIC Pause status: Paused (we'll run manually first)
 # MAGIC ```
+
+# MAGIC **Note on Quartz Cron:** Databricks uses the Quartz cron format, which includes a seconds field and uses `?` for "no specific value" in day-of-week or day-of-month fields. This differs slightly from standard UNIX cron.
 # MAGIC
 # MAGIC **Notifications:**
 # MAGIC ```

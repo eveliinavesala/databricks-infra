@@ -100,7 +100,7 @@ print(f"  - {CATALOG}.{USER_SCHEMA}.bronze_* (ingested data)")
 # MAGIC Task name: ingest_files
 # MAGIC Type: Notebook
 # MAGIC Source: Workspace
-# MAGIC Notebook path: /Workspace/course/notebooks/02_week/06_file_ingestion
+# MAGIC Notebook path: /Workspace/Shared/terraform-managed/course/notebooks/02_week/06_file_ingestion.py
 # MAGIC ```
 # MAGIC
 # MAGIC **Cluster Configuration:**
@@ -146,7 +146,7 @@ print(f"  - {CATALOG}.{USER_SCHEMA}.bronze_* (ingested data)")
 # MAGIC Task name: ingest_api
 # MAGIC Type: Notebook
 # MAGIC Source: Workspace
-# MAGIC Notebook path: /Workspace/course/notebooks/02_week/07_api_ingest
+# MAGIC Notebook path: /Workspace/Shared/terraform-managed/course/notebooks/02_week/07_api_ingest.py
 # MAGIC ```
 # MAGIC
 # MAGIC **Cluster:**
@@ -175,7 +175,7 @@ print(f"  - {CATALOG}.{USER_SCHEMA}.bronze_* (ingested data)")
 # MAGIC ```
 # MAGIC Task name: ingest_database
 # MAGIC Type: Notebook
-# MAGIC Notebook path: /Workspace/course/notebooks/02_week/08_database_ingest
+# MAGIC Notebook path: /Workspace/Shared/terraform-managed/course/notebooks/02_week/08_database_ingest.py
 # MAGIC Compute: Same as previous tasks
 # MAGIC Depends on: (empty - parallel execution)
 # MAGIC Parameters:
@@ -190,7 +190,7 @@ print(f"  - {CATALOG}.{USER_SCHEMA}.bronze_* (ingested data)")
 # MAGIC ```
 # MAGIC Task name: ingest_s3
 # MAGIC Type: Notebook
-# MAGIC Notebook path: /Workspace/course/notebooks/02_week/09_s3_ingest
+# MAGIC Notebook path: /Workspace/Shared/terraform-managed/course/notebooks/02_week/09_s3_ingest.py
 # MAGIC Compute: Same as previous tasks
 # MAGIC Depends on: (empty - parallel execution)
 # MAGIC Parameters:
@@ -224,8 +224,8 @@ print(f"  - {CATALOG}.{USER_SCHEMA}.bronze_* (ingested data)")
 # MAGIC
 # MAGIC **Schedule (Optional):**
 # MAGIC ```
-# MAGIC Schedule type: Cron
-# MAGIC Cron expression: 0 2 * * *  (Daily at 2 AM)
+# MAGIC Schedule type: Quartz Cron
+# MAGIC Cron expression: = 0 0 2 * * ?  (Daily at 2 AM)
 # MAGIC Timezone: America/New_York
 # MAGIC Pause status: Paused (we'll run manually first)
 # MAGIC ```
@@ -355,6 +355,13 @@ print("""
 
 # Install Databricks SDK
 %pip install databricks-sdk --quiet
+%restart_python
+
+# COMMAND ----------
+
+#Restarting the kernel removes earlier loaded variables
+%run ../utils/user_schema_setup.py
+
 
 # COMMAND ----------
 
@@ -365,6 +372,8 @@ from databricks.sdk.service.compute import AutoScale
 
 # Initialize SDK client (auto-authenticated in Databricks notebooks)
 w = WorkspaceClient()
+job_id = None
+run_id = None
 
 print("=== Databricks SDK Initialized ===")
 print(f"✅ Connected to: {w.config.host}")
@@ -384,8 +393,8 @@ job_name = f"SDK_Bronze_Ingestion_{USER_SCHEMA}"
 
 # Base parameters to pass to all notebooks
 base_params = {
-    "catalog": CATALOG,
-    "schema": USER_SCHEMA
+    "catalog": {CATALOG},
+    "schema": {USER_SCHEMA}
 }
 
 # Define all 4 ingestion tasks
@@ -462,6 +471,7 @@ for i, task in enumerate(tasks, 1):
 print("=== Creating Job via SDK ===\n")
 
 try:
+    global job_id
     # Check if job already exists (to avoid duplicates)
     existing_jobs = list(w.jobs.list(name=job_name))
 
@@ -517,9 +527,6 @@ try:
     print(f"  Tasks: {len(tasks)} parallel ingestion tasks")
     print(f"  View in UI: {w.config.host}/#job/{job_id}")
 
-    # Store for later use
-    dbutils.jobs.taskValues.set(key="job_id", value=str(job_id))
-
 except Exception as e:
     print(f"❌ Error creating/updating job: {e}")
     raise
@@ -534,10 +541,9 @@ except Exception as e:
 print("=== Running Multi-Task Ingestion Job ===\n")
 
 try:
+    global run_id
     # Retrieve job ID
-    job_id = int(dbutils.jobs.taskValues.get(taskKey="", key="job_id", default="0", debugValue="0"))
-
-    if job_id == 0:
+    if job_id is None:
         print("⚠️  Job ID not found. Please run the 'Create the Job' cell first.")
     else:
         print(f"Triggering job run for Job ID: {job_id}")
@@ -558,9 +564,6 @@ try:
         print(f"   All 4 ingestion tasks will run in parallel")
         print(f"   Expected duration: ~2-5 minutes (depends on data volume)")
 
-        # Store run ID for monitoring
-        dbutils.jobs.taskValues.set(key="run_id", value=str(run_id))
-
 except Exception as e:
     print(f"❌ Error running job: {e}")
     raise
@@ -579,9 +582,7 @@ print("=== Real-Time Job Monitoring ===\n")
 
 try:
     # Retrieve run ID
-    run_id = int(dbutils.jobs.taskValues.get(taskKey="", key="run_id", default="0", debugValue="0"))
-
-    if run_id == 0:
+    if run_id is None:
         print("⚠️  Run ID not found. Please run the 'Run the Job' cell first.")
     else:
         print(f"Monitoring Run ID: {run_id}")
@@ -680,9 +681,10 @@ print(f"Checking tables created in: {CATALOG}.{USER_SCHEMA}\n")
 
 # List all bronze tables
 try:
-    tables = spark.sql(f"SHOW TABLES IN {CATALOG}.{USER_SCHEMA}").collect()
+    tables = spark.catalog.listTables(dbName=f"{CATALOG}.{USER_SCHEMA}")
+    print(tables)
 
-    bronze_tables = [row.tableName for row in tables if row.tableName.startswith('bronze_')]
+    bronze_tables = [row.name for row in tables if row.name.startswith('bronze_')]
 
     if bronze_tables:
         print(f"✅ Found {len(bronze_tables)} Bronze tables:\n")
@@ -723,9 +725,7 @@ except Exception as e:
 print("=== Job Management Operations ===\n")
 
 try:
-    job_id = int(dbutils.jobs.taskValues.get(taskKey="", key="job_id", default="0", debugValue="0"))
-
-    if job_id > 0:
+    if job_id is not None:
         # Get job details
         job = w.jobs.get(job_id=job_id)
 
@@ -768,9 +768,7 @@ print("=== Job Cleanup ===\n")
 
 # Uncomment to delete the job
 # try:
-#     job_id = int(dbutils.jobs.taskValues.get(taskKey="", key="job_id", default="0", debugValue="0"))
-#
-#     if job_id > 0:
+#     if job_id is not None:
 #         w.jobs.delete(job_id=job_id)
 #         print(f"✅ Deleted job: {job_id}")
 #     else:
